@@ -8,9 +8,16 @@ static struct can2040 cbus;
 static void can2040_cb(struct can2040 *cd, uint32_t notify, struct can2040_msg *msg)
 {
     // Callback function - add message handling
-    if(notify == CAN2040_NOTIFY_TX) {
-        // Do something idk
-        ;
+    // For testing! Don't print in irq and always treating msg as 8 bytes of data
+    if(notify == CAN2040_NOTIFY_RX) {
+        char message[9];
+        for(int i = 0; i < 8; i++) {
+            message[i] = msg->data[i];
+        }
+        message[8] = '\0';
+        printf("Can Message Received:\n\t%s\n", message);
+    } else {
+        printf("Error occured :(");
     }
 }
 
@@ -64,9 +71,11 @@ int main (void) {
 // };
     sleep_ms(10000);
     while(1) {
-        //printf("Transmitting 'hello :)'.");
-        can2040_transmit(&cbus, &message);
-        //printf("Transmitted message.");
         sleep_ms(5000);
+        printf("Listening...\n");
+        // printf("Transmitting 'hello :)'.");
+        // can2040_transmit(&cbus, &message);
+        // printf("Transmitted message.");
+        // sleep_ms(1000);
     }
 }
