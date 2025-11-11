@@ -2,22 +2,24 @@
 #include <hardware/regs/intctrl.h>
 #include <stdio.h>
 #include <pico/stdlib.h>
+#include <FreeRTOS.h>
+#include <queue.h>
+#include <task.h>
+
+#define RX_MSG_TASK_PRIORITY     ( tskIDLE_PRIORITY + 5UL )
+#define RX_MSG_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
+
+QueueHandle_t queue;
 
 static struct can2040 cbus;
 
 static void can2040_cb(struct can2040 *cd, uint32_t notify, struct can2040_msg *msg)
 {
-    // Callback function - add message handling
-    // For testing! Don't print in irq and always treating msg as 8 bytes of data
+    // Callback function
     if(notify == CAN2040_NOTIFY_RX) {
-        char message[9];
-        for(int i = 0; i < 8; i++) {
-            message[i] = msg->data[i];
+        if(xQueueSendToBackFromISR(queue, msg, NULL) != pdPASS) {
+            printf("ERROR: MSG QUEUE FULL\n");
         }
-        message[8] = '\0';
-        printf("Can Message Received:\n\t%s\n", message);
-    } else {
-        printf("Error occured :(");
     }
 }
 
@@ -46,10 +48,38 @@ void canbus_setup(void)
     can2040_start(&cbus, sys_clock, bitrate, gpio_rx, gpio_tx);
 }
 
+/*
+ * Task that reads messages added to a queue from the CAN bus interrupt handler
+ */
+void read_message_task(void *args)
+{
+    struct can2040_msg rx_message;
+    sleep_ms(10000);
+
+    while (1)
+    {
+        printf("Waiting for message...\n\n");
+        if(xQueueReceive(queue, &rx_message, portMAX_DELAY) != pdPASS) {
+            printf("ERROR: QUEUE MESSAGE COULD NOT BE RECEIVED");
+            continue;
+        }
+        char message[9];
+        int i;
+        for(i = 0; i < rx_message.dlc && i < 8; i++) {
+            message[i] = rx_message.data[i];
+        }
+        message[i] = '\0';
+        printf("Can Message Received:\n\t\"%s\"\n\n", message);
+    }
+}
+
 int main (void) {
     stdio_init_all();
+    // Setup Queue for reading messages
+    queue = xQueueCreate(20, sizeof(struct can2040_msg));
 
     canbus_setup();
+
     struct can2040_msg message;
     message.id = 0x102;
     message.dlc = 8;
@@ -69,13 +99,10 @@ int main (void) {
 //         uint32_t data32[2];
 //     };
 // };
-    sleep_ms(10000);
-    while(1) {
-        sleep_ms(5000);
-        printf("Listening...\n");
-        // printf("Transmitting 'hello :)'.");
-        // can2040_transmit(&cbus, &message);
-        // printf("Transmitted message.");
-        // sleep_ms(1000);
-    }
+
+    // Create task
+    TaskHandle_t rx_msg_task;
+    xTaskCreate(read_message_task, "ReadCanMsg", RX_MSG_TASK_STACK_SIZE, (void *)&queue, RX_MSG_TASK_PRIORITY, &rx_msg_task);
+
+    vTaskStartScheduler();
 }
