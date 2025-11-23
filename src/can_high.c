@@ -17,9 +17,6 @@ static struct can2040_msg tx_msg;
 
 static struct can2040 cbus;
 
-uint8_t msg_received;
-uint32_t threshold;
-
 /*
  * Helper function for tight busy wait loop that won't get optimized out.
  */
@@ -77,13 +74,9 @@ void transmit_message_task(void *args)
             looping at 15000 iterations: lowest value while still consistantly receiving messages from both sides
             */
         busy_wait(15000);
-        // vTaskDelay(pdTICKS_TO_MS(1000));
         if(can2040_check_transmit(&cbus))
         {
             can2040_transmit(&cbus, &tx_msg);
-            // if(!msg_received) {
-            //     threshold += 10;
-            // }
         }
     }
 }
@@ -101,7 +94,6 @@ void read_message_task(void *args)
             printf("ERROR: QUEUE MESSAGE COULD NOT BE RECEIVED");
             continue;
         }
-        msg_received = 1;
         char message[9];
         int i;
         for(i = 0; i < rx_message.dlc && i < 8; i++) {
@@ -114,9 +106,6 @@ void read_message_task(void *args)
 
 int main (void) {
     stdio_init_all();
-
-    msg_received = 0;
-    threshold = 10000;
 
     // Setup Queue for reading messages
     queue = xQueueCreate(20, sizeof(struct can2040_msg));

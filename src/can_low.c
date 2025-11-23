@@ -22,6 +22,8 @@ static void can2040_cb(struct can2040 *cd, uint32_t notify, struct can2040_msg *
     // Callback function
     if(notify == CAN2040_NOTIFY_RX) {
         if(xQueueSendToBackFromISR(queue, msg, NULL) != pdPASS) {
+            // NOTE: This needs to be commented out when receiving messages from "babbling node"
+            //       The extra time it takes to print breaks the functionality (plus printing from IRQ is bad anyway)
             // printf("ERROR: MSG QUEUE FULL\n");
             ;
         }
