@@ -22,7 +22,8 @@ static void can2040_cb(struct can2040 *cd, uint32_t notify, struct can2040_msg *
     // Callback function
     if(notify == CAN2040_NOTIFY_RX) {
         if(xQueueSendToBackFromISR(queue, msg, NULL) != pdPASS) {
-            printf("ERROR: MSG QUEUE FULL\n");
+            // printf("ERROR: MSG QUEUE FULL\n");
+            ;
         }
     }
 }
@@ -56,7 +57,7 @@ void transmit_message_task(void *args)
 {
     vTaskDelay(pdTICKS_TO_MS(5000));
     while(1) {
-        vTaskDelay(pdTICKS_TO_MS(500));
+        vTaskDelay(pdTICKS_TO_MS(1000));
         if(can2040_check_transmit(&cbus))
         {
             can2040_transmit(&cbus, &tx_msg);
@@ -72,7 +73,6 @@ void read_message_task(void *args)
     struct can2040_msg rx_message;
     while (1)
     {
-        printf("Waiting for message...\n\n");
         if(xQueueReceive(queue, &rx_message, portMAX_DELAY) != pdPASS) {
             printf("ERROR: QUEUE MESSAGE COULD NOT BE RECEIVED");
             continue;
@@ -83,17 +83,17 @@ void read_message_task(void *args)
             message[i] = rx_message.data[i];
         }
         message[i] = '\0';
-        printf("Can Message Received:\n\t\"%s\"\n\n", message);
+        printf("Can Message Received:\n\t\"%s\"\nID:\n\t%d\n\n", message, rx_message.id);
     }
 }
 
 int main (void) {
     stdio_init_all();
     // Setup Queue for reading messages
-    queue = xQueueCreate(20, sizeof(struct can2040_msg));
+    queue = xQueueCreate(10, sizeof(struct can2040_msg));
 
     
-    tx_msg.id = 0x112;
+    tx_msg.id = 0xFFFFFFFF ^ CAN2040_ID_RTR ^ CAN2040_ID_EFF;
     tx_msg.dlc = 8;
     tx_msg.data[0] = 'g';
     tx_msg.data[1] = 'o';

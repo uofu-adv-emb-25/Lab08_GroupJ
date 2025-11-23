@@ -17,6 +17,17 @@ static struct can2040_msg tx_msg;
 
 static struct can2040 cbus;
 
+uint8_t msg_received;
+uint32_t threshold;
+
+/*
+ * Helper function for tight busy wait loop that won't get optimized out.
+ */
+void busy_wait(uint32_t max)
+{
+    for(uint32_t i = 0; i < max; i++){asm("");}
+}
+
 static void can2040_cb(struct can2040 *cd, uint32_t notify, struct can2040_msg *msg)
 {
     // Callback function
@@ -56,13 +67,27 @@ void transmit_message_task(void *args)
 {
     vTaskDelay(pdTICKS_TO_MS(5000));
     while(1) {
-        // for(int i = 0; i < 1000; i++){;}
+        /* Notes: 
+            looping at 100 iterations: practically no change
+            looping at 1000 iterations: practically no change
+            looping at 10000 iterations: only occasionally receiving messages when not monitoring low priority side
+            looping at 100000 iterations: consistantly receiving messages from both sides
+            looping at 50000 iterations: consistantly receiving messages from both sides
+            looping at 20000 iterations: consistantly receiving messages from both sides
+            looping at 15000 iterations: lowest value while still consistantly receiving messages from both sides
+            */
+        busy_wait(15000);
+        // vTaskDelay(pdTICKS_TO_MS(1000));
         if(can2040_check_transmit(&cbus))
         {
             can2040_transmit(&cbus, &tx_msg);
+            // if(!msg_received) {
+            //     threshold += 10;
+            // }
         }
     }
 }
+
 
 /*
  * Task that reads messages added to a queue from the CAN bus interrupt handler
@@ -72,28 +97,32 @@ void read_message_task(void *args)
     struct can2040_msg rx_message;
     while (1)
     {
-        printf("Waiting for message...\n\n");
         if(xQueueReceive(queue, &rx_message, portMAX_DELAY) != pdPASS) {
             printf("ERROR: QUEUE MESSAGE COULD NOT BE RECEIVED");
             continue;
         }
+        msg_received = 1;
         char message[9];
         int i;
         for(i = 0; i < rx_message.dlc && i < 8; i++) {
             message[i] = rx_message.data[i];
         }
         message[i] = '\0';
-        printf("Can Message Received:\n\t\"%s\"\n\n", message);
+        printf("Can Message Received:\n\t\"%s\"\nID:\n\t%d\n\n", message, rx_message.id);
     }
 }
 
 int main (void) {
     stdio_init_all();
+
+    msg_received = 0;
+    threshold = 10000;
+
     // Setup Queue for reading messages
     queue = xQueueCreate(20, sizeof(struct can2040_msg));
 
     
-    tx_msg.id = 0x102;
+    tx_msg.id = 0x000;
     tx_msg.dlc = 8;
     tx_msg.data[0] = 'h';
     tx_msg.data[1] = 'e';
